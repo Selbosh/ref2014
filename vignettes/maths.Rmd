@@ -1,0 +1,94 @@
+---
+title: "Analysing Mathematical Sciences REF results"
+author: "David Selby"
+date: "`r format(Sys.Date(), '%e %B %Y')`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE
+)
+
+```
+
+```{r}
+library(ref2014)
+```
+
+There were 36 Units of Assessment (UoAs) in the REF.
+The names of each of these subject areas are stored in the vector `UoA`.
+
+```{r, results = 'asis'}
+data(UoA)
+cat(paste('1.', UoA), sep = '\n')
+```
+
+This makes it easy to look up the ID of a particular unit of assessment.
+
+```{r}
+which(UoA == 'Mathematical Sciences')
+grep('Math', UoA)
+```
+
+Or to select several related subject areas.
+
+```{r}
+grep('Engineering', UoA, value = TRUE)
+```
+
+```{r}
+library(dplyr)
+outputs <- ref2014::outputs %>%
+  transmute(institution = `Institution name`,
+            uoa_name = `Unit of assessment name`,
+            uoa_number = `Unit of assessment number`,
+            output_type = `Output type`,
+            title = Title, doi = DOI,
+            volume_title = `Volume title`,
+            volume_std = ref2014:::standardise_volume_title(volume_title),
+            issn = gsub('[^[:alnum:]]', '', ISSN),
+            isbn = gsub('[^[:alnum:]]', '', ISBN),
+            research_group = `Research group`)
+
+maths_results <- subset(results, `Unit of assessment number` == 10)
+maths_outputs <- subset(outputs, uoa_number == 10) %>%
+  mutate(row_id = row_number())
+```
+
+Key features in the submission data include the titles and DOIs of the research outputs.
+In the mathematical sciences data, there `r round(100 * mean(!is.na(maths_outputs$doi)), 2)`% of entries contain DOIs and `r round(100 * mean(!is.na(maths_outputs$issn)), 2)` have ISSNs.
+
+```{r}
+## If any two entries share an ISSN, DOI or (standardised) volume title,
+## then they MUST be collected into the same journal. 
+
+# maths_long <- maths_outputs %>%
+#   select(row_id, doi, volume_std, issn, isbn) %>%
+#   tidyr::gather('identifier', 'value', -row_id) %>%
+#   filter(!is.na(value)) # Important to avoid grouping by missingness
+
+# library(igraph)
+# connected_components <- maths_long %>%
+#   select(-identifier) %>%
+#   graph_from_data_frame %>%
+#   clusters %>% membership %>% stack %>%
+#   rename(journal_id = values, row_id = ind)
+
+# maths_outputs2 <- maths_outputs %>%
+#   merge(connected_components, by = 'row_id', all.x = TRUE)
+
+maths_outputs2 <- cluster_outputs_by_journals(maths_outputs)
+
+warning('Current implementation is fragile wrt column names')
+```
+
+After grouping submissions into journals, we have reduced the dimensionality of the data from `r nrow(maths_outputs)` papers to `r n_distinct(maths_outputs2$journal_id)` journals.
+There are `r sum(is.na(maths_outputs2$journal_id))` submissions (`r round(100 * mean(is.na(maths_outputs2$journal_id)), 2)`%) that could not be assigned to a journal as they were missing volume title, DOI, ISSN and ISBN.
+Of these unassigned submissions, `r with(maths_outputs2, sum(is.na(journal_id) & output_type == 'D'))` were classified as journal articles.

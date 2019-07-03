@@ -1,0 +1,441 @@
+---
+title: "Computing strength of pseudo-data"
+author: "David Selby"
+date: "`r format(Sys.Date(), '%e %B %Y')`"
+output: html_document #rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+set.seed(2019)
+```
+
+## 
+
+Assuming the parameter vector \(\beta\) has mean zero, it is translated by intercept \(\mu\).
+(Equivalently, we can simply omit the parameter \(\mu\) and let \(\beta\) have mean \(\mu\).)
+
+```{r}
+ninst <- 10
+m <- 10 # average no. articles per journal per institution
+J <- 100 # 100
+
+# Ground truth. Unknown!
+beta <- rnorm(J, sd = .1)
+mu <- -.5
+
+rdirichlet <- function(n, alpha = 1) {
+  x <- rgamma(n, alpha)
+  x / sum(x)
+}
+
+# Dataset
+dataset <- within(data.frame(
+  journal = rep(as.character(1:J), ninst),
+  #ntrials = round(runif(J * ninst, max = m)), ## This is probably an issue
+  ntrials = as.vector( replicate(ninst, rmultinom(1, m * J, rdirichlet(J, a = .25))) ), # too homogeneous? lower alpha
+  inst = rep(1:ninst, each = J),
+  inst0 = 0L),
+  success <- rbinom(J * ninst, ntrials, prob = plogis(mu + beta))
+)
+
+dataset <- subset(dataset, ntrials > 0)
+
+head(dataset)
+```
+
+Now, let's define some pseudo-data.
+
+```{r}
+empirical <- TRUE
+
+pseudo_success <- 1/2
+if (empirical)
+  pseudo_success <- with(dataset, sum(success) / sum(ntrials))
+
+make_pseudodata <- function(strength) {
+  data.frame(journal = as.character(1:J),
+             ntrials = strength,
+             success = strength * pseudo_success,
+             inst = 0,
+             inst0 = 1L)
+}
+```
+
+Fit the model:
+
+```{r}
+fit_model <- function(strength, data = dataset) {
+  augmented <- rbind(data, make_pseudodata(strength))
+  augmented$success_frac <- augmented$success / augmented$ntrials
+  glm(success_frac ~ -1 + inst0 + journal,
+      family = binomial, weights = ntrials, data = augmented)
+}
+```
+
+A simple example for strength equal to 2:
+
+```{r}
+eg10 <- fit_model(strength = 2)
+
+# Should be ~mu
+mean(coef(eg10)[-1])
+
+# Should be ~sd of betas
+sd(coef(eg10)[-1])
+```
+
+Compare over a grid of strength parameters:
+
+```{r, warning = FALSE}
+strengths <- 10^seq(-2, 4, by = .2)
+models <- lapply(strengths, fit_model)
+
+plot(strengths, sapply(models, function(m) sd(coef(m)[-1])),
+     log = 'x', xlab = 'strength', ylab = 'SD(coefs)', type = 'b',
+     main = 'Standard deviation of journal params at different prior strengths')
+text(strengths[3], .9*sd(beta), 'True SD', col = 'tomato2')
+abline(h = sd(beta), lty = 2, col = 'tomato2')
+```
+
+But suppose we didn't know what the true standard deviation was. What then?
+Maybe this will help?
+
+### Cross validation
+
+```{r, warning = FALSE}
+cv_result <- data.frame()
+for (s in strengths)
+  for (i in 1:ninst) {
+    model <- fit_model(s, data = subset(dataset, (inst != i) & !inst0))
+    held_out <- subset(dataset, inst == i)
+    pred <- predict(model, newdata = held_out, type = 'response')
+    expectation <- pred * held_out$ntrials
+    errors <- expectation - held_out$success
+    cv_result <- rbind(cv_result, data.frame(strength = s,
+                                             inst = as.character(i),
+                                             sumsq = sum(errors^2)))
+  }
+
+head(cv_result)
+```
+
+```{r, message = FALSE}
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+scale_x_power10 <- function(...) {
+  # Utility function for nice '10^1, 10^2, 10^3, ...' x-axis labels in ggplot2
+  scale_x_log10(breaks = 10^(-4:4),
+                minor_breaks = NULL,
+                labels = scales::trans_format('log10',
+                                              scales::math_format(10^.x)),
+                ...)
+}
+
+cv_result %>%
+  group_by(strength) %>%
+  summarise(totalerr = sum(sumsq)) %>%
+  ggplot(aes(strength, totalerr)) +
+  geom_line() + geom_point() +
+  scale_x_power10() +
+  labs(x = 'Number of pseudo-articles',
+       y = expression(sum(epsilon^2, NULL, NULL)),
+       title = 'How much regularisation is appropriate?',
+       subtitle = 'Sum of squared errors from leave-one-out cross validation') +
+  theme(axis.title.y = element_text(angle = 0, vjust = .5),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())
+```
+
+## A slightly more complex example
+
+Using a data-frame-based ('tidy') approach to modelling.
+
+We now attempt to run expectation--maximization on aggregated data.
+
+```{r}
+Y <- dataset %>%
+  group_by(inst) %>%
+  summarise(success = sum(success), ntrials = sum(ntrials))
+
+N <- select(dataset, -success) %>%
+  left_join(Y %>% select(inst, inst_success = success), by = 'inst')
+```
+
+**Beware:** functions from the 'BiasedUrn' package take weights as *odds*, not as probabilities.
+
+So
+
+```{r}
+x <- BiasedUrn::oddsMFNCHypergeo(c(5, 10, 15), m = c(20, 20, 20), n = 5 + 10 + 15)
+x # odds
+
+x / (1 + x) # odds --> probabilities
+
+plogis(log(x)) # odds --> log-odds --> probabilities
+```
+
+Starting the algorithm...
+
+```{r}
+beta_init <- data.frame(journal = as.character(1:J),
+                        probs = rdirichlet(J, alpha = 100)) %>%
+  transmute(journal, odds = probs / (1 - probs))
+
+# Impute some values
+expect <- function(beta_guess, data = N) {
+  left_join(data, beta_guess, by = 'journal') %>%
+    group_by(inst) %>%
+    mutate(success = BiasedUrn::meanMFNCHypergeo(m = ntrials,
+                              n = first(inst_success),
+                              odds = odds,
+                              precision = 0.1)) %>%
+    select(-odds, -inst_success)
+}
+
+head(expect(beta_init))
+```
+
+Given the imputed data, the modelling should be similar to earlier.
+
+```{r}
+maximize <- function(data, strength) {
+  augmented <- bind_rows(data, make_pseudodata(strength))
+  augmented$success_frac <- augmented$success / augmented$ntrials
+  glm(success_frac ~ -1 + inst0 + journal,
+      family = binomial, weights = ntrials, data = augmented)
+}
+
+get_odds_from_model <- function(model) {
+  data.frame(journal = gsub('journal', '', names(coef(model))[-1]),
+             odds = exp(coef(model)[-1]),  # NB: odds != probabilities
+             row.names = NULL)
+}
+
+x <- maximize(expect(beta_init), strength = 1)
+head(get_odds_from_model(x))
+```
+
+Now let's run EM for a bit and see what happens!
+
+```{r, warning = FALSE}
+# The EM algorithm
+# Needs a proper stopping criterion, rather than arbitrarily running maxit times
+# EM <- function(strength, data, maxit = 200) {
+#   beta_current <- beta_init <- data.frame(journal = as.character(1:J),
+#                                           odds = rdirichlet(J, alpha = 100))
+#   for (iter in 1:maxit) {
+#     if (iter %% 10 == 0)
+#       message(sprintf('Strength %s (%.f%%)', strength, 100 * iter / maxit))
+#     imputed <- expect(beta_current, data)
+#     model <- maximize(imputed, strength = strength)
+#     beta_current <- get_odds_from_model(model)
+#   }
+#   return(model)
+# }
+EM <- function(strength, init, data, maxit = 1000, tolerance = 1e-10, trace = 0) {
+  beta_current <- init
+  for (iter in 1:maxit) {
+    imputed <- expect(beta_current, data)
+    model <- maximize(imputed, strength = strength)
+    if (iter > 1) {
+      change <- deviance(model) - dev_prev
+      if (-change < tolerance)
+        return(model)
+      if (trace && iter %% trace == 0)
+        message(sprintf('Strength %e (%.f%%) change in deviance: %e',
+                        strength, 100 * iter / maxit, change))
+    }
+    beta_current <- get_odds_from_model(model)
+    dev_prev <- deviance(model)
+  }
+  warning('Failed to converge after ', maxit, ' iterations')
+  return(model)
+}
+```
+
+```{r turboem, warning = FALSE}
+# By using an appropriate EM-acceleration technique, EM runs in ~15% of the time
+
+library(turboEM)
+
+#model
+
+fixptfn <- function(param, data, strength) {
+  param_df <- data.frame(journal = gsub('journal', '', names(coef(model)[-1])),
+                         odds = exp(param),  # NB: odds != probabilities
+                         row.names = NULL)
+  imputed <- expect(param_df, data)
+  model <- maximize(imputed, strength = strength)
+  return(coef(model)[-1])
+}
+
+objfn <- function(param, data, strength) {
+  param_df <- data.frame(journal = gsub('journal', '', names(coef(model)[-1])),
+                         odds = exp(param),  # NB: odds != probabilities
+                         row.names = NULL)
+  imputed <- expect(param_df, data)
+  model <- maximize(imputed, strength = strength)
+  return(-logLik(model))
+}
+
+set.seed(2019)
+res <- turboem(par = coef(model)[-1], fixptfn = fixptfn, #objfn = objfn,
+               method = c('em', 'squarem'), data = N, strength = 1)
+
+res
+system.time(x<-EM(1, get_odds_from_model(model), N))
+compare <- cbind(t(res$pars), custom = coef(x)[-1])
+pairs(compare)
+```
+
+Without cross-validation, can we at least try to get the mean and standard deviation of the parameters right?
+
+```{r, warning = FALSE, message = interactive()}
+strengths <- 10^seq(7, -3, by = -.5) # Modify this if you are impatient!
+init <- data.frame(journal = as.character(1:J), odds = runif(J, max = 10))
+grid <- data.frame()
+for (s in strengths) {
+  model <- EM(s, init, N, maxit = 1000, trace = 50)
+  grid <- rbind(grid, data.frame(strength = s,
+                                 loglik = logLik(model),
+                                 deviance = deviance(model),
+                                 alpha = coef(model)[1],
+                                 mean = mean(coef(model)[-1]),
+                                 sd = sd(coef(model)[-1])))
+  init <- get_odds_from_model(model)
+}
+
+ggplot(grid) +
+  aes(strength, sd) +
+  geom_hline(yintercept = sd(beta), linetype = 'dashed', colour = 'tomato2') +
+  geom_line() + geom_point() +
+  scale_x_power10() +
+  expand_limits(y = 0:1) +
+  ggtitle('What level of regularization gives the right std. deviation?')
+
+ggplot(grid) +
+  aes(strength, mean) +
+  geom_hline(yintercept = mu, linetype = 'dashed', colour = 'tomato2') +
+  geom_line() + geom_point() +
+  scale_x_power10() +
+  expand_limits(y = c(-2, 2)) +
+  ggtitle('Comparing mean of parameters with true mean')
+
+ggplot(grid) +
+  aes(strength, alpha) +
+  geom_hline(yintercept = -mu, linetype = 'dashed', colour = 'tomato2') +
+  geom_line() + geom_point() +
+  scale_x_power10() +
+  expand_limits(y = c(-2, 2)) +
+  ggtitle('Comparing alpha parameter with (-1) * true mean')
+
+ggplot(grid) +
+  aes(strength, loglik) +
+  geom_line() + geom_point() +
+  scale_x_power10() +
+  ggtitle('Log-likelihood of logistic model')
+
+ggplot(grid) +
+  aes(strength, deviance) +
+  geom_line() + geom_point() +
+  scale_x_power10() +
+  ggtitle('Deviance of logistic model')
+```
+
+The standard deviation appears to cross in one place ~~(see graph, but at the time of writing it's about strength = 10^.5^),~~ and the mean is about right, compared to the true \(\mu = `r mu`\).
+
+## Cross-validation for EM
+
+```{r}
+index_dissimilarity <- function(x, y) {
+  if (round(sum(x)) != round(sum(y)))
+    stop('Populations of x and y should be equal, but ', sum(x), ' != ', sum(y))
+  sum(abs(x - y)) / 2 / sum(x)
+}
+```
+
+We divide the data into, say 5 folds, so that institutions 1 and 2 are in the first fold, institutions 3 and 4 are in the second fold, and so on. During cross-validation, one fold is held out and the remaining data is used to fit a model and try to predict the held-out outcomes.
+The errors for each fold are then added together (in the case of sum of squares) or averaged (in the case of index of dissimilarity).
+
+```{r, warning = FALSE, message = interactive()}
+nfolds <- 5
+boundaries <- seq(0, ninst, length.out = nfolds + 1)
+folds <- findInterval(1:ninst, boundaries, left.open = TRUE)
+
+cv_em_result <- data.frame()
+for (rep in 1:10) {
+  init <- data.frame(journal = as.character(1:J), odds = runif(J, max = 10))
+  for (f in 1:nfolds)
+    for (s in strengths) {
+      i <- (1:ninst)[folds == f] # Which institution(s) to hold out
+      message('Holding out ', paste(i, collapse = ', '))
+      model <- EM(strength = s, init, data = filter(N, !inst %in% i),
+                  maxit = 1000, trace = 200)
+      init <- get_odds_from_model(model)
+      held_out <- subset(N, inst %in% i)
+      predicted <- predict(model, newdata = held_out)
+      
+      held_out %>%
+        left_join(get_odds_from_model(model), by = 'journal') %>%
+        mutate(predicted = (odds / (1 + odds)) * ntrials) %>%  # remember: odds != probs
+        group_by(inst) %>%
+        summarise(predicted = sum(predicted),
+                  actual = first(inst_success),
+                  predicted_failure = sum(ntrials) - predicted,
+                  actual_failure = sum(ntrials) - actual) -> predictions
+      delta <- with(predictions,
+                    index_dissimilarity(cbind(predicted, predicted_failure),
+                                        cbind(actual, actual_failure)))
+      error <- with(predictions, predicted - actual)
+      cv_em_result <- rbind(cv_em_result,
+                            data.frame(strength = s,
+                                       fold = as.character(f), # inst = as.character(i),
+                                       delta = delta, sumsq = sum(error^2),
+                                       rep = rep)
+      )
+    }
+}
+```
+
+A quick peek:
+
+```{r}
+head(cv_em_result)
+```
+
+And now, do we get the same pattern as before?
+
+```{r}
+ggplot(cv_em_result) + aes(strength, delta, colour = fold, group = fold) +
+  geom_line() + geom_point() +
+  scale_x_power10()
+cv_em_result %>%
+  group_by(strength, rep) %>%
+  summarise(delta = mean(delta)) %>%
+  ggplot(aes(strength, delta, colour = factor(rep))) +
+  geom_line() + geom_point() +
+  scale_x_power10()
+
+ggplot(cv_em_result) + aes(strength, sumsq, colour = fold, group = fold) +
+  geom_line() + geom_point() +
+  scale_x_power10()
+cv_em_result %>%
+  group_by(strength, rep) %>%
+  summarise(sumsq = sum(sumsq)) %>%
+  ggplot(aes(strength, sumsq, colour = factor(rep))) +
+  geom_line() + geom_point() +
+  scale_x_power10()
+```
+
+
+

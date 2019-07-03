@@ -1,8 +1,53 @@
 #' Download data from the REF 2014 web site
 #'
+#' This helper function will download and unzip an Excel (\code{.xlsx}) file
+#' containing either the full results or the \emph{Research outputs (REF2)}
+#' submission data for every institution and every unit of assessment in the
+#' Research Excellence Framework 2014.
+#'
+#' Alternatively you can download the data yourself manually from the
+#' \href{https://results.ref.ac.uk/Results}{REF 2014 web site}.
+#' Once downloaded, call \code{\link[readxl]{read_excel}} to import the data
+#' from the spreadsheet into R.
+#'
+#' @note
+#' Unfortunately there is no way to read Excel files from an \code{\link{unz}}
+#' connection, so it is necessary to save the file to disk. However, if you
+#' leave the \code{destination} to the default \code{tempdir()} then you should
+#' not need to worry too much about cleaning up the \code{.xlsx} files
+#' afterwards.
+#'
+#' @param type Either 'outputs' or 'results'
+#' @param destination Optional directory in which to store the downloaded
+#' \code{.xlsx} file. If not supplied, it will be saved to a temporary directory
+#'
+#' @return Path to the downloaded/unzipped \code{.xlsx} file of REF outputs
+#'
+#' @seealso \code{\link[readxl]{read_excel}}, to import downloaded data into R
+#'
+#' @export
+download_REF <- function(type = c('results', 'outputs'),
+                         destination = tempdir()) {
+  type <- match.arg(type)
+  if (type == 'results') {
+    url <- 'https://results.ref.ac.uk/DownloadFile/AllResults/xlsx'
+    temp <- tempfile(fileext = '.xlsx', tmpdir = destination)
+    download.file(url, temp, mode = 'wb')
+    return(temp)
+  }
+  url <- 'https://results.ref.ac.uk/DownloadFile/Form/REF2/excelwithnames'
+  temp <- tempfile(fileext = '.zip')
+  on.exit(unlink(temp))
+  download.file(url, temp, mode = 'wb')
+  unzip(temp, exdir = destination)
+}
+
+#' Download submissions data from the REF 2014 web site
+#'
 #' Use this function to download an Excel spreadsheet from the REF 2014 web site
 #' describing institutional submissions and results for a particular unit of
-#' assessment (UoA). See Details.
+#' assessment (UoA). See Details. You probably don't want this function---it's
+#' more efficient to use \code{\link{download_REF}('outputs')} instead.
 #'
 #' A unit of assessment is an academic subject area, enumerated as follows.
 #' See \href{https://results.ref.ac.uk/DownloadSubmissions/SelectUoa}{online}
@@ -52,7 +97,7 @@
 #' @return
 #' A character vector of file paths to the downloaded \code{.xlsx} spreadsheets
 #' @export
-download_uoa <- function(uoa = 1:36, destination = '.') {
+download_submissions <- function(uoa = 1:36, destination = '.') {
   if (any(uoa < 1 | uoa > 36 | round(uoa) != uoa))
     stop('Units of assessment (UoAs) must be integers between 1 and 36')
   if (any(duplicated(uoa)))
@@ -60,41 +105,15 @@ download_uoa <- function(uoa = 1:36, destination = '.') {
   uoa <- unique(uoa)
   file_list <- vector(length = length(uoas))
   for (i in uoa)
-    file_list[i] <- download_single_uoa(i, destination)
+    file_list[i] <- download_UoA(i, destination)
   file_list
 }
 
-download_single_uoa <- function(uoa, destination = tempdir()) {
+download_UoA <- function(uoa, destination = tempdir()) {
   temp <- tempfile(fileext = '.zip')
   on.exit(unlink(temp))
   url <- 'https://results.ref.ac.uk/DownloadFile/UnitOfAssessment'
   download.file(paste(url, uoa, 'excelwithnames', sep = '/'), temp, mode = 'wb')
   xls_filename <- grep('\\.xlsx$', unzip(temp, list = TRUE)$Name, value = TRUE)
   unzip(temp, files = xls_filename, exdir = destination)
-}
-
-
-#' Import REF data from an Excel spreadsheet
-#'
-#' Extract data on institutional outputs and results from files downloaded from
-#' the REF 2014 web site. Each file should correspond to a particular unit of
-#' assessment (UoA). If you don't have the files already on your computer, you
-#' can download them using \code{\link{download_uoa}}.
-#'
-#' This is a light wrapper around \code{\link[readxl]{read_excel}}.
-#'
-#' @param filename Path to the Excel spreadsheet
-#'
-#' @seealso \code{\link{download_uoa}}, to download the spreadsheet files
-#'
-#' @importFrom readxl read_excel
-#'
-#' @export
-read_outputs <- function(filename) {
-  readxl::read_excel(filename, sheet = 'Outputs', skip = 4)
-}
-
-#' @rdname read_outputs
-read_profiles <- function(filename) {
-  readxl::read_excel(filename, sheet = 'Profiles', skip = 4)
 }
