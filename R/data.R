@@ -55,3 +55,42 @@
 #' @format A tibble with 7,644 rows and 16 columns
 #' @source \url{https://results.ref.ac.uk/DownloadSubmissions}
 'results'
+
+#' Tidy the output data
+#'
+#' This is a utility function that performs three useful tasks on a REF outputs
+#' dataset, making it more amenable to later analysis.
+#' \itemize{
+#' \item coerce column names to snake case (replacing spaces with underscores)
+#' \item standardize ISBNs and ISSNs by removing hyphens and spaces
+#' \item add a \code{volume_std} column representing a standardised journal/volume title
+#' }
+#'
+#' @param outputs A dataset of REF outputs. Defaults to whole REF2014 dataset
+#'
+#' @return
+#' The \code{outputs} data with column names and serial numbers sanitized
+#'
+#' @examples
+#' # Extract Economics submissions data
+#' econ <- grep('^Economics', UoA)
+#' subset(tidy_outputs(outputs), uoa_number == econ)
+#'
+#' @seealso \code{\link{standardise_volume_title}}
+#'
+#' @importFrom dplyr %>% transmute
+#'
+#' @export
+tidy_outputs <- function(outputs = ref2014::outputs) {
+  ref2014::outputs %>%
+    transmute(institution = `Institution name`,
+              uoa_name = `Unit of assessment name`,
+              uoa_number = `Unit of assessment number`,
+              output_type = `Output type`,
+              title = Title, doi = DOI,
+              volume_title = `Volume title`,
+              volume_std = ref2014:::standardise_volume_title(volume_title),
+              issn = gsub('[^[:alnum:]]', '', ISSN),
+              isbn = gsub('[^[:alnum:]]', '', ISBN),
+              research_group = `Research group`)
+}

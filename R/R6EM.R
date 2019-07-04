@@ -16,6 +16,7 @@
 #'
 #' @examples
 #' # See strength.Rmd to generate the dataset.
+#' \dontrun{
 #' trials <- select(dataset, inst, journal, ntrials) %>% mutate_if(is.factor, as.character)
 #' totals <- dataset %>% group_by(inst) %>% summarise(total = sum(success))
 #'
@@ -23,6 +24,7 @@
 #' test <- EM$new(trials, totals, 2)
 #' test$run(100)
 #' test$iterations
+#' }
 #'
 #' @export
 EM <- R6::R6Class('EM',

@@ -45,18 +45,7 @@ grep('Engineering', UoA, value = TRUE)
 
 ```{r}
 library(dplyr)
-outputs <- ref2014::outputs %>%
-  transmute(institution = `Institution name`,
-            uoa_name = `Unit of assessment name`,
-            uoa_number = `Unit of assessment number`,
-            output_type = `Output type`,
-            title = Title, doi = DOI,
-            volume_title = `Volume title`,
-            volume_std = ref2014:::standardise_volume_title(volume_title),
-            issn = gsub('[^[:alnum:]]', '', ISSN),
-            isbn = gsub('[^[:alnum:]]', '', ISBN),
-            research_group = `Research group`)
-
+outputs <- tidy_outputs()
 maths_results <- subset(results, `Unit of assessment number` == 10)
 maths_outputs <- subset(outputs, uoa_number == 10) %>%
   mutate(row_id = row_number())
