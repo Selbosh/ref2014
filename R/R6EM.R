@@ -34,8 +34,10 @@ EM <- R6::R6Class('EM',
                     strength = NULL,
                     latent = NULL,
                     model = NULL,
-                    converged = FALSE,
-                    iterations = 0,
+                    converged = NULL,
+                    journals = NULL,
+                    iterations = NULL,
+                    loglik = NULL,
 
                     initialize = function(trials, totals, strength, init = NULL) {
                       if (any(duplicated(totals$inst)))
@@ -48,14 +50,21 @@ EM <- R6::R6Class('EM',
                       self$observed <-
                         left_join(totals, trials, by = 'inst') %>%
                         mutate_if(is.factor, as.character)
+                      self$journals <- unique(trials$journal)
+                      self$pseudodata <- private$make_pseudodata(strength)
+                      self$restart(init = init)
+                    },
+
+                    restart = function(init = NULL) {
                       if (is.null(init))
                         init <- data.frame(
-                          journal = unique(trials$journal),
-                          logit = rnorm(n_distinct(trials$journal)),
+                          journal = self$journals,
+                          logit = rnorm(length(self$journals)),
                           stringsAsFactors = FALSE
                         )
-                      pseudodata <- private$make_pseudodata(strength)
-                      self$latent <- bind_rows(self$observed, pseudodata) %>%
+                      self$converged <- FALSE
+                      self$iterations <- 0L
+                      self$latent <- bind_rows(self$observed, self$pseudodata) %>%
                         mutate(inst0 = as.numeric(inst == '((Pseudo-inst))')) %>%
                         left_join(init, by = 'journal')
                     },
@@ -100,16 +109,18 @@ EM <- R6::R6Class('EM',
                         self$iterate(verbose)
                         is_inst0 <- as.logical(self$latent$inst0)
                         loglik <- #logLik(self$model) # exclude prior component of loglikelihood
-                          self$loglik(subset(self$latent$success, !is_inst0),
-                                      subset(self$latent$ntrials, !is_inst0),
-                                      logits = subset(predict(self$model), !is_inst0))
+                          self$compute_loglik(
+                            subset(self$latent$success, !is_inst0),
+                            subset(self$latent$ntrials, !is_inst0),
+                            logits = subset(predict(self$model), !is_inst0)
+                          )
                         self$converged <- loglik - loglik_prev < tolerance
-                        loglik_prev <- loglik
+                        self$loglik <- loglik_prev <- loglik
                       }
                       invisible(self)
                     },
 
-                    loglik = function(success = self$latent$success,
+                    compute_loglik = function(success = self$latent$success,
                                       ntrials = self$latent$ntrials,
                                       logits = predict(self$model)) {
                       if (length(success) != length(ntrials) |
@@ -124,7 +135,7 @@ EM <- R6::R6Class('EM',
                            ) / -2
                     },
 
-                    loglik2 = function(success = self$latent$success,
+                    compute_loglik2 = function(success = self$latent$success,
                                        ntrials = self$latent$ntrials,
                                        logits = predict(self$model)) {
                       # Alternative implementation to loglik() method
@@ -149,9 +160,9 @@ EM <- R6::R6Class('EM',
                         distinct(journal, .keep_all = TRUE) %>%
                         right_join(newdata, by = 'journal')
 
-                      self$loglik(success = newdata2$success,
-                                  ntrials = newdata2$ntrials,
-                                  logits = newdata2$logit)
+                      self$compute_loglik(success = newdata2$success,
+                                          ntrials = newdata2$ntrials,
+                                          logits = newdata2$logit)
                     }
 
                   ),
