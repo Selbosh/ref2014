@@ -56,7 +56,7 @@ EM <- R6::R6Class('EM',
                         )
                       pseudodata <- private$make_pseudodata(strength)
                       self$latent <- bind_rows(self$observed, pseudodata) %>%
-                        mutate(inst0 = as.numeric(inst == 0)) %>%
+                        mutate(inst0 = as.numeric(inst == '((Pseudo-inst))')) %>%
                         left_join(init, by = 'journal')
                     },
 
@@ -160,7 +160,7 @@ EM <- R6::R6Class('EM',
                       data.frame(journal = unique(self$observed$journal),
                                  ntrials = strength,
                                  success = strength / 2,
-                                 inst = 0, inst0 = 1L,
+                                 inst = '((Pseudo-inst))', inst0 = 1L,
                                  stringsAsFactors = FALSE)
                     },
                     get_logits_from_model = function(model = self$model) {
