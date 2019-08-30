@@ -1,6 +1,6 @@
 Package: ref2014
 Title: Analysis of the UK Research Excellence Framework 2014
-Version: 0.0.0.9000
+Version: 0.0.0.9001
 Authors@R: 
     person(given = "David",
            family = "Selby",
