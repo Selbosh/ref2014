@@ -4,7 +4,7 @@
 \alias{tidy_results}
 \title{Tidy REF results and filter by Unit of Assessment}
 \usage{
-tidy_results(number, name, grep, ...)
+tidy_results(number = NULL, name = NULL, grep = NULL, ...)
 }
 \arguments{
 \item{number}{an integer from 1 to 36. See \code{\link{UoA}} for a key}

@@ -37,17 +37,22 @@
 #' @importFrom dplyr %>% transmute filter
 #'
 #' @export
-tidy_results <- function(number, name, grep, ...) {
+tidy_results <- function(number = NULL, name = NULL, grep = NULL, ...) {
   ref2014::results %>%
     transmute(institution = `Institution name`,
               uoa_name = `Unit of assessment name`,
               uoa_number = `Unit of assessment number`,
               profile = Profile,
               fte = `FTE Category A staff submitted`,
-              `4*`, `3*`, `2*`, `1*`, unclassified) %>%
-    dplyr::filter(if (!missing(number)) uoa_number == number else TRUE,
-                  if (!missing(name)) uoa_name == name else TRUE,
-                  if (!missing(grep)) grepl(grep, uoa_name, ...))
+              `4*`, `3*`, `2*`, `1*`, unclassified) -> result
+
+  if (!is.null(number)) {
+    dplyr::filter(result, uoa_number == number)
+  } else if (!is.null(name)) {
+    dplyr::filter(result, uoa_name == name)
+  } else if (!is.null(grep)) {
+    dplyr::filter(result, grepl(grep, uoa_name, ...))
+  } else return(result)
 }
 
 #' List the most popular journals
@@ -81,4 +86,42 @@ get_top_journals <- function(outputs, min_articles = 20) {
     arrange(desc(n)) %>%
     dplyr::filter(n >= min_articles) %>%
     left_join(journal_names, by = 'journal_id')
+}
+
+
+#' Aggregate outputs that are not in the top \code{n} journals
+#'
+#' Choose the top \code{n} journals according to the number of submissions in
+#' the REF. The remaining journals are aggregated into a 'super-journal' called
+#' 'Other'.
+#'
+#' To preserve data integrity, each journal is given a \code{new_id}, which in
+#' the case of the top \code{n} journals is identical to their original
+#' \code{journal_id}, but in the case of \code{n+1} or less popular journals, is
+#' set equal to \code{0}.
+#'
+#' @param outputs A data frame like that produced by \code{\link{tidy_outputs}}
+#' @param top_journals A data frame like that produced by \code{\link{get_top_journals}}
+#'
+#' @return A data frame similar to \code{outputs} but with lower-ranked journals
+#' aggregated into a single journal called 'Other'.
+#'
+#' @importFrom dplyr %>% mutate group_by summarise n first
+#'
+#' @seealso \code{\link{get_top_journals}}
+#'
+#' @examples
+#' math_outputs <- subset(tidy_outputs(), uoa_name == 'Mathematical Sciences')
+#' math_outputs <- cluster_outputs_by_journals(math_outputs)
+#' aggregate_outputs(math_outputs)
+#'
+#' @export
+aggregate_outputs <- function(outputs,
+                              top_journals = get_top_journals(outputs)) {
+  outputs %>%
+    mutate(new_id = ifelse(journal_id %in% top_journals$journal_id,
+                           journal_id, 0)) %>%
+    group_by(institution, new_id) %>%
+    summarise(n = n(), volume_title =
+                if (all(new_id == 0)) 'Other' else first(volume_title))
 }
