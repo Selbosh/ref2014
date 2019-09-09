@@ -1,6 +1,6 @@
 Package: ref2014
 Title: Analysis of the UK Research Excellence Framework 2014
-Version: 0.0.0.9001
+Version: 0.0.0.9002
 Authors@R: 
     person(given = "David",
            family = "Selby",
@@ -13,6 +13,7 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 6.1.1
+Imports: dplyr, R6, igraph, tidyr
 Suggests: 
     knitr,
     rmarkdown
