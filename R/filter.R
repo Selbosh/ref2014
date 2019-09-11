@@ -97,16 +97,21 @@ get_top_journals <- function(outputs, min_articles = 20) {
 #'
 #' To preserve data integrity, each journal is given a \code{new_id}, which in
 #' the case of the top \code{n} journals is identical to their original
-#' \code{journal_id}, but in the case of \code{n+1} or less popular journals, is
-#' set equal to \code{0}.
+#' \code{journal_id}, in the case of conference proceedings is set equal to
+#' \code{0}, in the case of \code{n+1} or less popular journals, is set equal to
+#' \code{-1} and in the case of other non-journal outputs it set equal to
+#' \code{-2}. These codes have no particular significance other than avoiding
+#' clashes with the automatically-assigned \code{journal_id}s assigned by the
+#' \code{\link{cluster_outputs_by_journal}} algorithm.
 #'
 #' @param outputs A data frame like that produced by \code{\link{tidy_outputs}}
 #' @param top_journals A data frame like that produced by \code{\link{get_top_journals}}
 #'
 #' @return A data frame similar to \code{outputs} but with lower-ranked journals
-#' aggregated into a single journal called 'Other'.
+#' aggregated classes 'Other journals', 'Conference proceedings' or 'Other
+#' outputs' according to their output type.
 #'
-#' @importFrom dplyr %>% mutate group_by summarise n first
+#' @importFrom dplyr %>% mutate group_by summarise n first case_when
 #'
 #' @seealso \code{\link{get_top_journals}}
 #'
@@ -119,9 +124,25 @@ get_top_journals <- function(outputs, min_articles = 20) {
 aggregate_outputs <- function(outputs,
                               top_journals = get_top_journals(outputs)) {
   outputs %>%
-    mutate(new_id = ifelse(journal_id %in% top_journals$journal_id,
-                           journal_id, 0)) %>%
+    mutate(new_id = case_when(
+      journal_id %in% top_journals$journal_id ~ journal_id,
+      output_type == 'E' ~ 0,
+      output_type == 'D' ~ -1,
+      TRUE ~ -2),
+      volume_title = case_when(
+        new_id == 0 ~ 'Conference proceedings',
+        new_id == -1 ~ 'Other journals',
+        new_id == -2 ~ 'Other outputs',
+        TRUE ~ volume_title
+      )
+    ) %>%
     group_by(institution, new_id) %>%
-    summarise(n = n(), volume_title =
-                if (all(new_id == 0)) 'Other' else first(volume_title))
+    summarise(n = n(), volume_title = first(volume_title))
+
+  # outputs %>%
+  #   mutate(new_id = ifelse(journal_id %in% top_journals$journal_id,
+  #                          journal_id, 0)) %>%
+  #   group_by(institution, new_id) %>%
+  #   summarise(n = n(), volume_title =
+  #               if (all(new_id == 0)) 'Other' else first(volume_title))
 }

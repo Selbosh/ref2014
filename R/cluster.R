@@ -22,6 +22,7 @@ cluster_outputs_by_journals <- function(data) {
   data <- dplyr::mutate(data, row_id = row_number())
 
   long_tbl <- data %>%
+    dplyr::filter(output_type == 'D') %>%
     dplyr::select(row_id, doi, volume_std, issn, isbn) %>%
     tidyr::gather('identifier', 'value', -row_id) %>%
     dplyr::filter(!is.na(value))
