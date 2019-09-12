@@ -86,6 +86,7 @@ tidy_outputs <- function(outputs = ref2014::outputs) {
     transmute(institution = `Institution name`,
               uoa_name = `Unit of assessment name`,
               uoa_number = `Unit of assessment number`,
+              main_panel = `Main panel`,
               output_type = `Output type`,
               title = Title, doi = DOI,
               volume_title = `Volume title`,
