@@ -1,4 +1,14 @@
-#' Group
+#' Group entities into journals according to identifiers
+#'
+#' This is an algorithm that identifies unique journals according to ISBNs,
+#' ISSNs, DOIs and titles that overlap.
+#'
+#' Some fields, such as Physics, feature journals with ambiguous volume titles,
+#' for example Physical Review A, B, C, D, E, Physics Review Letters and their
+#' various abbreviations. To avoid these journals mistakenly being aggregated,
+#' we recommend setting \code{use_volume_title} to \code{FALSE}.
+#'
+#' @param use_volume_title Use the volume titles in grouping process? See Details
 #'
 #' @examples
 #' # Not done yet. Need to reconcile column names.
@@ -18,12 +28,13 @@
 #' could not be assigned to a group will have \code{journal_id = NA}.
 #'
 #' @export
-cluster_outputs_by_journals <- function(data) {
+cluster_outputs_by_journals <- function(data, use_volume_title = TRUE) {
   data <- dplyr::mutate(data, row_id = row_number())
 
   long_tbl <- data %>%
     dplyr::filter(output_type == 'D') %>%
     dplyr::select(row_id, doi, volume_std, issn, isbn) %>%
+    (function(.) if (!use_volume_title) dplyr::select(., -volume_std) else .) %>%
     tidyr::gather('identifier', 'value', -row_id) %>%
     dplyr::filter(!is.na(value))
 
