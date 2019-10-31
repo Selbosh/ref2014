@@ -95,3 +95,24 @@ tidy_outputs <- function(outputs = ref2014::outputs) {
               isbn = gsub('[^[:alnum:]]', '', ISBN),
               research_group = `Research group`)
 }
+
+#' Metadata on articles submitted as outputs to REF2014
+#'
+#' For use as a lookup table matching Digital Object Identifiers (DOIs) to
+#' article metadata, such as the title of the containing journal.
+#'
+#' A selection of DOIs and their respective journal names are cached in this package,
+#' but it does not cover every submission in REF2014, let alone all DOIs generally.
+#' To request additional data from CrossRef, see \code{\link[rcrossref]{cr_works}}.
+#' The purpose of this dataset is to overcome data quality problems in
+#' \code{\link{outputs}}, namely that many journal titles and ISSNs have been
+#' incorrectly input due to human error, or are inconsistently formatted.
+#'
+#' @section Warning
+#' DOIs are case-sensitive. Those on CrossRef tend to be in lower case, so run
+#' \code{\link[base]{tolower}} for better results matching records by DOI.
+#'
+#' @format A tibble with XXX rows and XXX columns
+#'
+#' @source \url{https://www.crossref.org/}
+'article_metadata'

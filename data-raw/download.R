@@ -10,3 +10,15 @@ usethis::use_data(results)
 outputs_file <- download_REF('outputs')
 outputs <- read_xlsx(outputs_file, skip = 4, guess_max = 1e5, na = 'n/a')
 usethis::use_data(outputs)
+
+# REF 2014 DOIs lookup table for selected Units of Assessment
+dois <- subset(tidy_outputs(),
+               output_type == 'D'
+               & uoa_name %in% c('Economics and Econometrics',
+                                 'Mathematical Sciences',
+                                 'Biological Sciences',
+                                 'Physics')
+               & !is.na(doi))$doi
+dois <- unique(tolower(dois))
+article_metadata <- rcrossref::cr_works(dois, .progress = 'txt', cursor = '*')
+usethis::use_data(article_metadata)
