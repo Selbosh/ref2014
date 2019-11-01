@@ -20,5 +20,22 @@ dois <- subset(tidy_outputs(),
                                  'Physics')
                & !is.na(doi))$doi
 dois <- unique(tolower(dois))
-article_metadata <- rcrossref::cr_works(dois, .progress = 'txt', cursor = '*')
+already_downloaded <- readr::read_csv('article_metadata.csv')
+dois <- dois[!dois %in% tolower(already_downloaded$doi)]
+
+dois_list <- split(dois, ceiling(seq_along(dois) / 100))
+article_metadata <- rcrossref::cr_works(dois_list[[1]], .progress = 'text')$data %>%
+  select(container.title, doi, issn, subject, title, publisher)
+readr::write_csv(article_metadata, 'article_metadata.csv')
+num_left <- length(dois_list) - 1
+for (chunk in tail(dois_list, 48)) {
+  Sys.sleep(3)
+  message(num_left, ' to go')
+  article_metadata <- rcrossref::cr_works(chunk, .progress = 'text')$data %>%
+    select(container.title, doi, issn, subject, title, publisher)
+  readr::write_csv(article_metadata, 'article_metadata.csv', append = TRUE)
+  num_left <- num_left - 1
+}
+article_metadata <- readr::read_csv('article_metadata.csv')
+invalid_dois <- dois[!dois %in% tolower(article_metadata$doi)]
 usethis::use_data(article_metadata)
