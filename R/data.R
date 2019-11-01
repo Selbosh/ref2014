@@ -112,7 +112,7 @@ tidy_outputs <- function(outputs = ref2014::outputs) {
 #' DOIs are case-sensitive. Those on CrossRef tend to be in lower case, so run
 #' \code{\link{tolower}} for better results matching records by DOI.
 #'
-#' @format A tibble with XXX rows and XXX columns
+#' @format A tibble with 22058 rows and 6 columns
 #'
 #' @source \url{https://www.crossref.org/}
 'article_metadata'

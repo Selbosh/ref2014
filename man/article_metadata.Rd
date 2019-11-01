@@ -4,7 +4,7 @@
 \name{article_metadata}
 \alias{article_metadata}
 \title{Metadata on articles submitted as outputs to REF2014}
-\format{A tibble with XXX rows and XXX columns}
+\format{A tibble with 22058 rows and 6 columns}
 \source{
 \url{https://www.crossref.org/}
 }
