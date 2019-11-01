@@ -108,9 +108,9 @@ tidy_outputs <- function(outputs = ref2014::outputs) {
 #' \code{\link{outputs}}, namely that many journal titles and ISSNs have been
 #' incorrectly input due to human error, or are inconsistently formatted.
 #'
-#' @section Warning
+#' @section Warning:
 #' DOIs are case-sensitive. Those on CrossRef tend to be in lower case, so run
-#' \code{\link[base]{tolower}} for better results matching records by DOI.
+#' \code{\link{tolower}} for better results matching records by DOI.
 #'
 #' @format A tibble with XXX rows and XXX columns
 #'

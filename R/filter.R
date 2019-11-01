@@ -102,7 +102,7 @@ get_top_journals <- function(outputs, min_articles = 20) {
 #' \code{-1} and in the case of other non-journal outputs it set equal to
 #' \code{-2}. These codes have no particular significance other than avoiding
 #' clashes with the automatically-assigned \code{journal_id}s assigned by the
-#' \code{\link{cluster_outputs_by_journal}} algorithm.
+#' \code{\link{cluster_outputs_by_journals}} algorithm.
 #'
 #' @param outputs A data frame like that produced by \code{\link{tidy_outputs}}
 #' @param top_journals A data frame like that produced by \code{\link{get_top_journals}}

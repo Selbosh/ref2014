@@ -29,7 +29,7 @@ the case of the top \code{n} journals is identical to their original
 \code{-1} and in the case of other non-journal outputs it set equal to
 \code{-2}. These codes have no particular significance other than avoiding
 clashes with the automatically-assigned \code{journal_id}s assigned by the
-\code{\link{cluster_outputs_by_journal}} algorithm.
+\code{\link{cluster_outputs_by_journals}} algorithm.
 }
 \examples{
 math_outputs <- subset(tidy_outputs(), uoa_name == 'Mathematical Sciences')
