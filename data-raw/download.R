@@ -38,4 +38,19 @@ for (chunk in tail(dois_list, 48)) {
 }
 article_metadata <- readr::read_csv('article_metadata.csv')
 invalid_dois <- dois[!dois %in% tolower(article_metadata$doi)]
+
+# Disambiguate titles such as 'Review of Economic Studies' vs 'The Review of Economic Studies'
+library(dplyr)
+article_metadata <- article_metadata %>%
+  tidyr::gather('id_type', 'id_value', container.title, issn) %>%
+  select(doi, id_value) %>%
+  filter(!is.na(id_value)) %>%
+  igraph::graph_from_data_frame() %>%
+  igraph::clusters() %>% igraph::membership() %>% stack() %>%
+  rename(journal_id = values, doi = ind) %>%
+  mutate(doi = as.character(doi)) %>%
+  right_join(article_metadata, by = 'doi') %>%
+  left_join(group_by(., journal_id) %>%
+              summarise(unique_journal_title = first(container.title)),
+            by = 'journal_id')
 usethis::use_data(article_metadata)
